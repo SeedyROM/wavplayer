@@ -1,10 +1,7 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use crate::{
-    resource::AudioResource,
+    resource::{AudioResource, Resources},
     stream::{StreamBuffer, StreamInfo},
 };
 use color_eyre::eyre::{eyre, Result};
@@ -12,22 +9,17 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, Host, OutputCallbackInfo, StreamConfig, SupportedStreamConfig,
 };
+use parking_lot::Mutex;
 
-type Resources<T> = Arc<Mutex<Vec<T>>>;
-
-pub struct AudioSystem<T> {
-    _host: Host,
+pub struct AudioSystem {
+    host: Host,
     device: Device,
     supported_stream_config: SupportedStreamConfig,
     stream_config: StreamConfig,
-    resources: Resources<T>,
+    resources: Resources,
 }
 
-impl<T> AudioSystem<T>
-where
-    T: AudioResource,
-    T: Send + 'static,
-{
+impl AudioSystem {
     pub fn new() -> Result<Self> {
         let host = cpal::default_host();
 
@@ -39,7 +31,7 @@ where
         let stream_config = supported_stream_config.clone().into();
 
         Ok(Self {
-            _host: host,
+            host,
             device,
             supported_stream_config,
             stream_config,
@@ -47,8 +39,8 @@ where
         })
     }
 
-    pub fn add_resource(&mut self, resource: T) {
-        self.resources.lock().unwrap().push(resource);
+    pub fn add_resource(&mut self, resource: impl AudioResource + 'static) {
+        self.resources.lock().push(Box::new(resource));
     }
 
     pub fn run(&self) -> Result<()> {
@@ -63,6 +55,12 @@ where
     where
         S: cpal::Sample,
     {
+        println!(
+            "Starting stream at host {:?} with device: {}",
+            self.host.id(),
+            self.device.name().unwrap_or("Unknown Device".into())
+        );
+
         let info = StreamInfo::from(&self.stream_config);
         let resources = self.resources.clone();
 
@@ -83,13 +81,13 @@ where
     }
 
     fn stream_callback<S>(
-        resources: Resources<T>,
+        resources: Resources,
         stream_buffer: &mut StreamBuffer<S>,
         _: &OutputCallbackInfo,
     ) where
         S: cpal::Sample,
     {
-        let mut resources = resources.lock().unwrap();
+        let mut resources = resources.lock();
         let info = stream_buffer.info;
         for frame in stream_buffer.into_frames() {
             for sample in frame.iter_mut() {

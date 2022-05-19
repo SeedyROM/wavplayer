@@ -15,7 +15,7 @@ struct WhiteNoise;
 
 impl AudioResource for WhiteNoise {
     fn tick(&mut self, _stream_info: &stream::StreamInfo) -> f32 {
-        ((thread_rng().gen::<f32>() * 2.0) - 1.0) * 0.5
+        ((thread_rng().gen::<f32>() * 2.0) - 1.0) * 0.03
     }
 }
 
@@ -61,6 +61,7 @@ fn main() -> Result<()> {
 
     let mut audio_sys = AudioSystem::new()?;
     audio_sys.add_resource(wav_file);
+    audio_sys.add_resource(WhiteNoise);
     audio_sys.run()?;
 
     Ok(())
