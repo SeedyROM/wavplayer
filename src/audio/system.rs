@@ -11,6 +11,7 @@ use cpal::{
 };
 use crossbeam::channel::Receiver;
 use parking_lot::Mutex;
+use tracing::{error, info};
 
 /// The global audio system
 pub struct AudioSystem {
@@ -68,7 +69,7 @@ impl AudioSystem {
     where
         S: cpal::Sample,
     {
-        println!(
+        info!(
             "Starting stream at host {:?} with device: {}",
             self.host.id(),
             self.device.name().unwrap_or("Unknown Device".into())
@@ -83,7 +84,7 @@ impl AudioSystem {
                 let stream_buffer = &mut StreamBuffer { data, info: &info };
                 Self::stream_callback(resources.clone(), stream_buffer, output_callback_info)
             },
-            |err| eprintln!("Stream callback error: {}", err),
+            |err| error!("Stream callback error: {}", err),
         )?;
 
         stream.play()?;
@@ -91,7 +92,7 @@ impl AudioSystem {
         // Wait for shutdown signal
         self.shutdown_rx.recv()?;
 
-        println!(
+        info!(
             "Stopping stream at host {:?} with device: {}",
             self.host.id(),
             self.device.name().unwrap_or("Unknown Device".into())
@@ -110,6 +111,9 @@ impl AudioSystem {
     {
         let mut resources = resources.lock();
         let info = stream_buffer.info;
+
+        // Zero the buffer.
+        stream_buffer.data.fill(S::from(&0.0));
 
         // For each frame, a sample per channel...
         for frame in stream_buffer.into_frames() {
