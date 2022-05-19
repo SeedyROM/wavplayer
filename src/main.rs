@@ -1,21 +1,19 @@
-pub mod resource;
-pub mod stream;
-pub mod system;
+pub mod audio;
 
 use std::{fs::File, io::BufReader, path::PathBuf};
 
+use audio::{resource::AudioResource, stream::StreamInfo};
 use color_eyre::eyre::Result;
 use hound::{WavReader, WavSpec};
 use rand::{thread_rng, Rng};
-use resource::AudioResource;
 
-use crate::system::AudioSystem;
+use audio::system::AudioSystem;
 
 /// Example white noise AudioResource
 struct WhiteNoise;
 
 impl AudioResource for WhiteNoise {
-    fn tick(&mut self, _stream_info: &stream::StreamInfo) -> f32 {
+    fn tick(&mut self, _stream_info: &StreamInfo) -> f32 {
         ((thread_rng().gen::<f32>() * 2.0) - 1.0) * 0.03
     }
 }
@@ -57,7 +55,7 @@ impl WavFile {
 }
 
 impl AudioResource for WavFile {
-    fn tick(&mut self, _stream_info: &stream::StreamInfo) -> f32 {
+    fn tick(&mut self, _stream_info: &StreamInfo) -> f32 {
         // TODO: If there is no next sample, return 0.0 for now.
         self.next_sample().unwrap_or_else(|err| {
             eprintln!("Failed to process sample: {}", err);

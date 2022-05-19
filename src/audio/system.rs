@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{
+use crate::audio::{
     resource::{AudioResource, Resources},
     stream::{StreamBuffer, StreamInfo},
 };
@@ -49,7 +49,7 @@ impl AudioSystem {
         })
     }
 
-    /// Add an struct that implements AudioResource to the system.
+    /// Add a struct that implements AudioResource to the system.
     pub fn add_resource(&mut self, resource: impl AudioResource + 'static) {
         self.resources.lock().push(Box::new(resource));
     }
@@ -110,6 +110,7 @@ impl AudioSystem {
     {
         let mut resources = resources.lock();
         let info = stream_buffer.info;
+
         // For each frame, a sample per channel...
         for frame in stream_buffer.into_frames() {
             // Process each sample...

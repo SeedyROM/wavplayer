@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use crate::stream::StreamInfo;
+use crate::audio::stream::StreamInfo;
 
 pub type Resources = Arc<Mutex<Vec<Box<dyn AudioResource>>>>;
 
