@@ -1,0 +1,13 @@
+[package]
+name = "wavplayer"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+color-eyre = "0.6.1"
+cpal = "0.13.5"
+hound = "3.4.0"
+rand = "0.8.5"
+ringbuf = "0.2.8"
