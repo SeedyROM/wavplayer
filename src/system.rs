@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use crate::{
     resource::{AudioResource, Resources},
@@ -9,18 +9,27 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, Host, OutputCallbackInfo, StreamConfig, SupportedStreamConfig,
 };
+use crossbeam::channel::Receiver;
 use parking_lot::Mutex;
 
+/// The global audio system
 pub struct AudioSystem {
+    // TODO: Move me into my own struct
     host: Host,
     device: Device,
     supported_stream_config: SupportedStreamConfig,
     stream_config: StreamConfig,
+
+    /// Audio resources to run each tick
     resources: Resources,
+
+    /// Handle shutdown
+    shutdown_rx: Receiver<()>,
 }
 
 impl AudioSystem {
-    pub fn new() -> Result<Self> {
+    /// Create a new audio system to play some sounds.
+    pub fn new(shutdown_rx: Receiver<()>) -> Result<Self> {
         let host = cpal::default_host();
 
         let device = host
@@ -36,13 +45,16 @@ impl AudioSystem {
             supported_stream_config,
             stream_config,
             resources: Arc::new(Mutex::new(Vec::new())),
+            shutdown_rx,
         })
     }
 
+    /// Add an struct that implements AudioResource to the system.
     pub fn add_resource(&mut self, resource: impl AudioResource + 'static) {
         self.resources.lock().push(Box::new(resource));
     }
 
+    /// Run the audio system and start a stream with the specified sample format.
     pub fn run(&self) -> Result<()> {
         match self.supported_stream_config.sample_format() {
             cpal::SampleFormat::I16 => self.stream::<i16>(),
@@ -51,6 +63,7 @@ impl AudioSystem {
         }
     }
 
+    /// Start an audio stream
     fn stream<S>(&self) -> Result<()>
     where
         S: cpal::Sample,
@@ -75,11 +88,19 @@ impl AudioSystem {
 
         stream.play()?;
 
-        std::thread::sleep(Duration::from_millis(10000));
+        // Wait for shutdown signal
+        self.shutdown_rx.recv()?;
+
+        println!(
+            "Stopping stream at host {:?} with device: {}",
+            self.host.id(),
+            self.device.name().unwrap_or("Unknown Device".into())
+        );
 
         Ok(())
     }
 
+    /// Send data to our audio stream
     fn stream_callback<S>(
         resources: Resources,
         stream_buffer: &mut StreamBuffer<S>,
@@ -89,14 +110,19 @@ impl AudioSystem {
     {
         let mut resources = resources.lock();
         let info = stream_buffer.info;
+        // For each frame, a sample per channel...
         for frame in stream_buffer.into_frames() {
+            // Process each sample...
             for sample in frame.iter_mut() {
-                let mut x = 0.0;
+                let mut mix = 0.0;
+                // Iterate each resource
                 for resource in resources.iter_mut() {
-                    x += resource.tick(info);
+                    // Add sample to the mix value
+                    mix += resource.tick(info);
                 }
-                x /= resources.len() as f32;
-                *sample = S::from(&x);
+                // Normalize back to -1, 1
+                mix /= resources.len() as f32;
+                *sample = S::from(&mix);
             }
         }
     }
