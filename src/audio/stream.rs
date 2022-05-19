@@ -14,19 +14,13 @@ impl From<&cpal::StreamConfig> for StreamInfo {
     }
 }
 
-pub struct StreamBuffer<'a, S>
-where
-    S: cpal::Sample,
-{
+pub struct StreamBuffer<'a> {
     pub info: &'a StreamInfo,
-    pub data: &'a mut [S],
+    pub data: &'a mut Vec<f32>,
 }
 
-impl<'a, S> StreamBuffer<'a, S>
-where
-    S: cpal::Sample,
-{
-    pub fn into_frames(&mut self) -> ChunksMut<'_, S> {
+impl<'a> StreamBuffer<'a> {
+    pub fn into_frames(&mut self) -> ChunksMut<'_, f32> {
         self.data.chunks_mut(self.info.channels)
     }
 }

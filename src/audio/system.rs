@@ -77,12 +77,16 @@ impl AudioSystem {
 
         let info = StreamInfo::from(&self.stream_config);
         let resources = self.resources.clone();
+        let mut work_buffer = Vec::<f32>::new();
 
         let stream = self.device.build_output_stream(
             &self.stream_config,
             move |data: &mut [S], output_callback_info: &OutputCallbackInfo| {
-                let stream_buffer = &mut StreamBuffer { data, info: &info };
-                Self::stream_callback(resources.clone(), stream_buffer, output_callback_info)
+                let stream_buffer = &mut StreamBuffer {
+                    data: &mut work_buffer,
+                    info: &info,
+                };
+                Self::stream_callback(resources.clone(), data, stream_buffer, output_callback_info)
             },
             |err| error!("Stream callback error: {}", err),
         )?;
@@ -104,31 +108,29 @@ impl AudioSystem {
     /// Send data to our audio stream
     fn stream_callback<S>(
         resources: Resources,
-        stream_buffer: &mut StreamBuffer<S>,
+        data: &mut [S],
+        stream_buffer: &mut StreamBuffer,
         _: &OutputCallbackInfo,
     ) where
         S: cpal::Sample,
     {
         let mut resources = resources.lock();
-        let info = stream_buffer.info;
 
+        // Resize the working buffer based on the data slice, if not the same.
+        if stream_buffer.data.len() != data.len() {
+            stream_buffer.data.resize(data.len(), 0.0);
+        }
         // Zero the buffer.
-        stream_buffer.data.fill(S::from(&0.0));
+        stream_buffer.data.fill(0.0);
 
-        // For each frame, a sample per channel...
-        for frame in stream_buffer.into_frames() {
-            // Process each sample...
-            for sample in frame.iter_mut() {
-                let mut mix = 0.0;
-                // Iterate each resource
-                for resource in resources.iter_mut() {
-                    // Add sample to the mix value
-                    mix += resource.tick(info);
-                }
-                // Normalize back to -1, 1
-                mix /= resources.len() as f32;
-                *sample = S::from(&mix);
-            }
+        // Write into the working buffer for each resoure
+        for resource in resources.iter_mut() {
+            resource.process(stream_buffer);
+        }
+
+        // Write to the output buffer
+        for i in 0..data.len() {
+            data[i] = S::from(&(stream_buffer.data[i] / resources.len() as f32))
         }
     }
 }

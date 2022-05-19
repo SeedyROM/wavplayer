@@ -3,20 +3,37 @@ pub mod logging;
 
 use std::{fs::File, io::BufReader, path::PathBuf};
 
-use audio::{resource::AudioResource, stream::StreamInfo};
+use audio::{resource::AudioResource, stream::StreamBuffer};
 use color_eyre::eyre::Result;
 use hound::{WavReader, WavSpec};
-use rand::{thread_rng, Rng};
 
 use audio::system::AudioSystem;
+use rand::{thread_rng, Rng};
 use tracing::{error, info};
+
+pub trait AdditiveSample {
+    type Sample;
+    fn write(&mut self, sample: Self::Sample);
+}
+
+impl AdditiveSample for f32 {
+    type Sample = f32;
+
+    fn write(&mut self, sample: Self::Sample) {
+        *self += sample;
+    }
+}
 
 /// Example white noise AudioResource
 struct WhiteNoise;
 
 impl AudioResource for WhiteNoise {
-    fn tick(&mut self, _stream_info: &StreamInfo) -> f32 {
-        ((thread_rng().gen::<f32>() * 2.0) - 1.0) * 0.03
+    fn process(&mut self, stream_buffer: &mut StreamBuffer) {
+        for frame in stream_buffer.into_frames() {
+            for sample in frame.iter_mut() {
+                sample.write(((thread_rng().gen::<f32>() * 2.0) - 1.0) * 0.03)
+            }
+        }
     }
 }
 
@@ -57,12 +74,16 @@ impl WavFile {
 }
 
 impl AudioResource for WavFile {
-    fn tick(&mut self, _stream_info: &StreamInfo) -> f32 {
-        // TODO: If there is no next sample, return 0.0 for now.
-        self.next_sample().unwrap_or_else(|err| {
-            error!("Failed to process sample: {}", err);
-            0.0
-        })
+    fn process(&mut self, stream_buffer: &mut StreamBuffer) {
+        for frame in stream_buffer.into_frames() {
+            for sample in frame.iter_mut() {
+                // If there is no next sample, return 0.0 for now.
+                sample.write(self.next_sample().unwrap_or_else(|err| {
+                    error!("Failed to process sample: {}", err);
+                    0.0
+                }))
+            }
+        }
     }
 }
 
@@ -81,9 +102,10 @@ fn main() -> Result<()> {
             .expect("Failed to send shutdown signal...");
     })?;
 
-    // Create the audio system and add our wave file resource
+    // Create the audio system and add our wave file resource and some noise for fun!
     let mut audio_sys = AudioSystem::new(shutdown_rx.clone())?;
     audio_sys.add_resource(wav_file);
+    audio_sys.add_resource(WhiteNoise);
 
     // 🎶 Make some NOISE! 🎶
     audio_sys.run()?;
